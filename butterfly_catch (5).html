@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Butterfly Catch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  :root{
+    --ink:#1a1c2e; --panel:#2d3250; --edge:#3a3f5c;
+    --pink:#ff5277; --pinkL:#ff8fa8; --green:#4fd86a; --greenL:#8fe89c;
+    --yellow:#ffd23f; --blue:#7a8bff; --red:#c41e3a;
+  }
+  html, body { height:100%; overflow:hidden; background:var(--ink); font-family:'Press Start 2P',monospace; color:#fff; }
+  #stage { position:fixed; inset:0; image-rendering:pixelated; }
+  #cam { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); background:var(--ink); }
+  #fx { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .sprite { position:absolute; width:52px; height:52px; transform:translate(-50%,-50%); will-change:left,top; pointer-events:none; image-rendering:pixelated; filter:drop-shadow(2px 2px 0 rgba(0,0,0,.5)); }
+
+  /* pixel hand cursor */
+  #hand { position:absolute; width:64px; height:64px; transform:translate(-50%,-50%); pointer-events:none; z-index:6; display:none; box-sizing:border-box; border:4px solid #fff; background:transparent; transition:width .1s,height .1s,border-color .1s,background .1s; image-rendering:pixelated; }
+  #hand.grab { width:48px; height:48px; border-color:var(--green); background:rgba(79,216,106,.22); }
+
+  /* HUD */
+  #hud { position:absolute; top:0; left:0; right:0; padding:14px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; z-index:5; }
+  .pbox { background:var(--panel); padding:8px 11px; image-rendering:pixelated; }
+  .pbox.pink { border:4px solid var(--pink); box-shadow:3px 3px 0 #000; }
+  .pbox.green { border:4px solid var(--green); box-shadow:3px 3px 0 #000; }
+  .pbox small { display:block; font-size:8px; letter-spacing:1px; margin-bottom:5px; }
+  .pbox.pink small { color:var(--pinkL); }
+  .pbox.green small { color:var(--greenL); }
+  .pbox b { font-size:18px; }
+  #gesture { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); z-index:5; font-size:9px; color:#fff; background:var(--panel); border:3px solid var(--edge); padding:7px 14px; box-shadow:3px 3px 0 #000; pointer-events:none; letter-spacing:1px; }
+
+  #flash { position:absolute; inset:0; z-index:9; background:#fff; opacity:0; pointer-events:none; }
+
+  /* sting overlay */
+  #sting { position:absolute; inset:0; z-index:8; display:none; align-items:center; justify-content:center; flex-direction:column; background:rgba(120,10,10,.42); color:#fff; }
+  #sting .big { font-size:60px; margin-bottom:14px; image-rendering:pixelated; }
+  #sting .msg { font-size:12px; line-height:1.6; text-align:center; text-shadow:2px 2px 0 #000; }
+  #sting .cd { font-size:48px; margin-top:16px; color:var(--yellow); text-shadow:3px 3px 0 #000; }
+
+  /* photo countdown overlay */
+  #pcount { position:absolute; inset:0; z-index:8; display:none; align-items:center; justify-content:center; pointer-events:none;
+    font-size:120px; color:var(--yellow); text-shadow:5px 5px 0 var(--red); }
+  #pcount::after { content:'SMILE!'; position:absolute; bottom:22%; font-size:14px; color:#fff; text-shadow:2px 2px 0 #000; letter-spacing:2px; }
+  #pcount.ping { animation:pingpop .6s steps(4) 1; }
+  @keyframes pingpop { 0%{ transform:scale(.4); opacity:.2;} 60%{ transform:scale(1.15); opacity:1;} 100%{ transform:scale(1); opacity:1;} }
+
+  /* overlays */
+  .overlay { position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center; flex-direction:column; padding:22px; text-align:center; background:rgba(26,28,46,.92); overflow-y:auto; }
+  .overlay h1 { font-size:24px; line-height:1.3; color:var(--yellow); text-shadow:3px 3px 0 var(--red); margin-bottom:16px; }
+  .overlay p { font-size:10px; line-height:1.9; max-width:340px; margin-bottom:10px; color:#cdd; }
+  .legend { display:flex; gap:26px; margin:14px 0; }
+  .legend div { font-size:9px; line-height:1.7; color:#cdd; }
+  .legend .lg-ico { width:38px; height:38px; margin:0 auto 8px; image-rendering:pixelated; }
+  .btn { margin-top:14px; pointer-events:auto; cursor:pointer; font-family:'Press Start 2P',monospace; background:var(--pink); border:4px solid #fff; color:#fff; font-size:12px; padding:13px 26px; letter-spacing:1px; box-shadow:5px 5px 0 #000; }
+  .btn:active { transform:translate(2px,2px); box-shadow:3px 3px 0 #000; }
+  .btn:disabled { opacity:.5; }
+  .btn.ghost { background:var(--panel); border-color:var(--blue); color:var(--blue); font-size:9px; padding:10px 18px; box-shadow:4px 4px 0 #000; margin-top:10px; }
+  #nameInput { pointer-events:auto; font-family:'Press Start 2P',monospace; width:260px; max-width:80vw; font-size:12px; text-align:center; padding:13px 12px; border:4px solid var(--blue); background:var(--panel); color:#fff; outline:none; margin-top:8px; box-shadow:3px 3px 0 #000; }
+  #nameInput::placeholder { color:#7d80a0; }
+  #finalScore { font-size:54px; color:var(--yellow); text-shadow:4px 4px 0 var(--red); margin:6px 0; }
+  #endStats { font-size:9px; color:#cdd; margin-bottom:12px; letter-spacing:1px; }
+  #photoWrap { margin:10px 0; }
+  #photo { width:200px; max-width:58vw; border:4px solid var(--yellow); transform:scaleX(-1); box-shadow:4px 4px 0 #000; image-rendering:auto; }
+  .err { color:#ff9aa8; font-size:9px; line-height:1.7; margin-top:12px; max-width:300px; }
+  .loading { color:#fff; font-size:9px; margin-top:12px; letter-spacing:1px; }
+  .hidden { display:none !important; }
+
+  /* leaderboard */
+  #board { width:100%; max-width:330px; margin:0 auto; }
+  #board h2 { font-size:11px; letter-spacing:3px; color:var(--blue); margin-bottom:12px; }
+  .row { display:flex; align-items:center; gap:8px; padding:8px 11px; background:var(--panel); border:3px solid var(--edge); margin-bottom:6px; font-size:11px; }
+  .row.top1 { color:var(--yellow); }
+  .row.me { border-color:var(--green); }
+  .row .rk { width:18px; text-align:center; }
+  .row .crown { width:18px; height:14px; image-rendering:pixelated; flex:0 0 auto; }
+  .row .nm { flex:1; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .sc { }
+  .boardNote { font-size:8px; line-height:1.7; color:#8a8da8; margin-top:6px; letter-spacing:1px; text-align:center; }
+
+  /* two-column end screen */
+  #endCols { display:flex; gap:18px; align-items:flex-start; justify-content:center; width:100%; max-width:680px; position:relative; z-index:2; }
+  #endLeft, #endRight { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; }
+  #endDivider { width:4px; align-self:stretch; background:repeating-linear-gradient(180deg,var(--edge) 0 6px,transparent 6px 12px); flex:0 0 auto; }
+  .scoreLbl { font-size:8px; letter-spacing:1px; color:#fff; margin-bottom:4px; }
+  #endRight .btn { width:100%; max-width:220px; }
+  /* photo frame with pixel border */
+  .frame { display:inline-block; padding:6px; background:repeating-linear-gradient(45deg,var(--yellow) 0 6px,var(--pink) 6px 12px); box-shadow:4px 4px 0 #000; margin-bottom:8px; line-height:0; }
+  .frame img { display:block; width:180px; max-width:46vw; border:3px solid var(--ink); transform:scaleX(-1); image-rendering:auto; }
+  /* stack columns on narrow screens */
+  @media (max-width:560px){
+    #endCols { flex-direction:column; gap:14px; align-items:center; }
+    #endDivider { width:60%; height:4px; align-self:center; background:repeating-linear-gradient(90deg,var(--edge) 0 6px,transparent 6px 12px); }
+    #endRight{ order:-1; }
+  }
+
+  .pop { position:absolute; transform:translate(-50%,-50%); z-index:7; pointer-events:none; font-family:'Press Start 2P',monospace; font-size:16px; text-shadow:2px 2px 0 #000; animation:rise .8s steps(6) forwards; }
+  @keyframes rise { from{opacity:1;} to{opacity:0; transform:translate(-50%,-150%);} }
+
+  /* pixel flower/grass decorations on overlays */
+  .deco { position:absolute; image-rendering:pixelated; pointer-events:none; z-index:1; opacity:.9; }
+  .deco.tl{ top:14px; left:14px; } .deco.tr{ top:14px; right:14px; }
+  .deco.bl{ bottom:14px; left:14px; } .deco.br{ bottom:14px; right:14px; }
+
+  /* big faint garden band pinned to top & bottom edges, behind the text */
+  .garden { position:absolute; left:0; right:0; height:100px; z-index:0; pointer-events:none; opacity:.16; background-repeat:repeat-x; background-position:bottom left; image-rendering:pixelated; }
+  .garden.top { top:0; transform:scaleY(-1); }
+  .garden.bottom { bottom:0; }
+  /* a few oversized blooms drifting in the empty side areas */
+  .bloom { position:absolute; z-index:0; pointer-events:none; opacity:.13; image-rendering:pixelated; animation:sway 4s ease-in-out infinite; }
+  @keyframes sway { 0%,100%{ transform:translateY(0) rotate(-3deg);} 50%{ transform:translateY(-8px) rotate(3deg);} }
+  .overlay > h1, .overlay > p, .overlay > .legend, .overlay > input, .overlay > .btn,
+  .overlay > #finalScore, .overlay > #endStats, .overlay > #photoWrap, .overlay > #board, .overlay > #endCols, .overlay > .loading, .overlay > .err { position:relative; z-index:2; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="cam" autoplay playsinline muted></video>
+  <canvas id="snap" class="hidden"></canvas>
+  <div id="fx"></div>
+  <div id="flash"></div>
+
+  <div id="hand"></div>
+
+  <div id="hud" class="hidden">
+    <div class="pbox pink"><small>SCORE</small><b id="scoreVal">0</b></div>
+    <div class="pbox green"><small>TIME</small><b id="timeVal">60</b></div>
+  </div>
+  <div id="gesture" class="hidden">SHOW YOUR HAND</div>
+
+  <div id="sting">
+    <div class="big" id="stingBee"></div>
+    <div class="msg">OUCH! A BEE STUNG YOU</div>
+    <div class="cd" id="stingCd">5</div>
+  </div>
+
+  <div id="pcount"></div>
+
+  <!-- start -->
+  <div id="start" class="overlay">
+    <h1>BUTTERFLY<br>CATCH</h1>
+    <p>CLOSE YOUR FIST OVER A BUTTERFLY TO GRAB IT. 60 SECONDS!</p>
+    <div class="legend">
+      <div><div class="lg-ico" id="legBf"></div>BLUE<br>+1</div>
+      <div><div class="lg-ico" id="legPink"></div>PINK<br>+3</div>
+      <div><div class="lg-ico" id="legBee"></div>BEE<br>-5S</div>
+    </div>
+    <input id="nameInput" type="text" maxlength="10" placeholder="YOUR NAME" autocomplete="off" />
+    <button class="btn" id="startBtn">PLAY &#9654;</button>
+    <div class="loading hidden" id="loadMsg">LOADING&hellip;</div>
+    <div class="err hidden" id="startErr"></div>
+  </div>
+
+  <!-- end -->
+  <div id="end" class="overlay hidden">
+    <h1>TIME'S UP!</h1>
+    <div id="endCols">
+      <div id="endLeft">
+        <div id="board">
+          <h2>LEADERBOARD</h2>
+          <div id="boardRows"></div>
+          <div class="boardNote" id="boardNote"></div>
+        </div>
+      </div>
+      <div id="endDivider"></div>
+      <div id="endRight">
+        <div class="scoreLbl">YOUR SCORE</div>
+        <div id="finalScore">0</div>
+        <div id="endStats"></div>
+        <div id="photoWrap" class="hidden">
+          <div class="frame"><img id="photo" alt="Your final shot" /></div>
+          <div><button class="btn ghost" id="dlBtn">SAVE PHOTO</button></div>
+        </div>
+        <button class="btn" id="againBtn">PLAY AGAIN &#9654;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script>
+(function(){
+  /* ===== SUPABASE: fill these in (see SETUP_leaderboard.md) ===== */
+  const SUPABASE_URL = "";   // e.g. "https://xxxx.supabase.co"
+  const SUPABASE_KEY = "";   // your anon public key (eyJ...)
+  /* ============================================================= */
+
+  /* ---- pixel sprite SVGs (drawn as data URIs) ---- */
+  const BUTTERFLY_SVG = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" shape-rendering="crispEdges" viewBox="0 0 16 16">'+
+    '<rect x="6" y="3" width="4" height="11" fill="#3a3f5c"/>'+
+    '<rect x="7" y="4" width="2" height="9" fill="#ffffff"/>'+
+    '<rect x="6" y="3" width="1" height="1" fill="#ffffff"/><rect x="9" y="3" width="1" height="1" fill="#ffffff"/>'+
+    '<rect x="3" y="3" width="3" height="3" fill="#46c0ff"/><rect x="2" y="4" width="1" height="4" fill="#2a8fdc"/><rect x="3" y="6" width="3" height="3" fill="#2a8fdc"/>'+
+    '<rect x="10" y="3" width="3" height="3" fill="#46c0ff"/><rect x="13" y="4" width="1" height="4" fill="#2a8fdc"/><rect x="10" y="6" width="3" height="3" fill="#2a8fdc"/>'+
+    '<rect x="3" y="9" width="2" height="3" fill="#7ad4ff"/><rect x="11" y="9" width="2" height="3" fill="#7ad4ff"/>'+
+    '<rect x="4" y="4" width="1" height="1" fill="#fff"/><rect x="11" y="4" width="1" height="1" fill="#fff"/>'+
+    '</svg>');
+  const PINK_BUTTERFLY_SVG = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" shape-rendering="crispEdges" viewBox="0 0 16 16">'+
+    '<rect x="6" y="3" width="4" height="11" fill="#3a3f5c"/>'+
+    '<rect x="7" y="4" width="2" height="9" fill="#ffffff"/>'+
+    '<rect x="6" y="3" width="1" height="1" fill="#ffffff"/><rect x="9" y="3" width="1" height="1" fill="#ffffff"/>'+
+    '<rect x="3" y="3" width="3" height="3" fill="#ff8fcf"/><rect x="2" y="4" width="1" height="4" fill="#ff5277"/><rect x="3" y="6" width="3" height="3" fill="#ff5277"/>'+
+    '<rect x="10" y="3" width="3" height="3" fill="#ff8fcf"/><rect x="13" y="4" width="1" height="4" fill="#ff5277"/><rect x="10" y="6" width="3" height="3" fill="#ff5277"/>'+
+    '<rect x="3" y="9" width="2" height="3" fill="#ffb3dd"/><rect x="11" y="9" width="2" height="3" fill="#ffb3dd"/>'+
+    '<rect x="4" y="4" width="1" height="1" fill="#fff"/><rect x="11" y="4" width="1" height="1" fill="#fff"/>'+
+    '<rect x="4" y="6" width="1" height="1" fill="#ffd23f"/><rect x="11" y="6" width="1" height="1" fill="#ffd23f"/>'+
+    '</svg>');
+  const BEE_SVG = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" shape-rendering="crispEdges" viewBox="0 0 16 16">'+
+    '<rect x="2" y="3" width="4" height="3" fill="#cfe8ff" opacity="0.85"/><rect x="10" y="3" width="4" height="3" fill="#cfe8ff" opacity="0.85"/>'+
+    '<rect x="5" y="6" width="6" height="6" fill="#ffce3f"/>'+
+    '<rect x="5" y="7" width="6" height="1" fill="#2a2a2a"/><rect x="5" y="9" width="6" height="1" fill="#2a2a2a"/><rect x="5" y="11" width="6" height="1" fill="#2a2a2a"/>'+
+    '<rect x="4" y="6" width="1" height="5" fill="#2a2a2a"/><rect x="11" y="6" width="1" height="5" fill="#2a2a2a"/>'+
+    '<rect x="6" y="5" width="1" height="1" fill="#2a2a2a"/><rect x="9" y="5" width="1" height="1" fill="#2a2a2a"/>'+
+    '</svg>');
+  const FLOWER_SVG = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" shape-rendering="crispEdges" viewBox="0 0 16 20">'+
+    '<rect x="7" y="9" width="2" height="10" fill="#3b8c2f"/>'+
+    '<rect x="4" y="12" width="3" height="2" fill="#4fd86a"/><rect x="9" y="14" width="3" height="2" fill="#4fd86a"/>'+
+    '<rect x="6" y="2" width="4" height="2" fill="#ff5277"/><rect x="4" y="4" width="2" height="4" fill="#ff5277"/><rect x="10" y="4" width="2" height="4" fill="#ff5277"/><rect x="6" y="8" width="4" height="2" fill="#ff5277"/>'+
+    '<rect x="6" y="4" width="4" height="4" fill="#ffd23f"/>'+
+    '</svg>');
+  const FLOWER2_SVG = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" shape-rendering="crispEdges" viewBox="0 0 16 20">'+
+    '<rect x="7" y="9" width="2" height="10" fill="#3b8c2f"/>'+
+    '<rect x="9" y="12" width="3" height="2" fill="#4fd86a"/><rect x="4" y="14" width="3" height="2" fill="#4fd86a"/>'+
+    '<rect x="6" y="2" width="4" height="2" fill="#7a8bff"/><rect x="4" y="4" width="2" height="4" fill="#7a8bff"/><rect x="10" y="4" width="2" height="4" fill="#7a8bff"/><rect x="6" y="8" width="4" height="2" fill="#7a8bff"/>'+
+    '<rect x="6" y="4" width="4" height="4" fill="#fff"/>'+
+    '</svg>');
+  const GRASS_SVG = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="14" shape-rendering="crispEdges" viewBox="0 0 20 14">'+
+    '<rect x="3" y="6" width="2" height="8" fill="#4fd86a"/><rect x="2" y="4" width="2" height="3" fill="#4fd86a"/>'+
+    '<rect x="9" y="3" width="2" height="11" fill="#3b8c2f"/><rect x="8" y="1" width="2" height="3" fill="#3b8c2f"/>'+
+    '<rect x="15" y="6" width="2" height="8" fill="#4fd86a"/><rect x="16" y="4" width="2" height="3" fill="#4fd86a"/>'+
+    '</svg>');
+  const GARDEN_SVG = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="40" shape-rendering="crispEdges" viewBox="0 0 60 40">'+
+    /* grass clumps */
+    '<rect x="2" y="26" width="2" height="14" fill="#4fd86a"/><rect x="1" y="22" width="2" height="5" fill="#4fd86a"/>'+
+    '<rect x="6" y="24" width="2" height="16" fill="#3b8c2f"/><rect x="9" y="28" width="2" height="12" fill="#4fd86a"/>'+
+    '<rect x="50" y="26" width="2" height="14" fill="#4fd86a"/><rect x="54" y="23" width="2" height="17" fill="#3b8c2f"/><rect x="57" y="28" width="2" height="12" fill="#4fd86a"/>'+
+    /* pink flower left */
+    '<rect x="16" y="20" width="2" height="20" fill="#3b8c2f"/><rect x="13" y="28" width="3" height="2" fill="#4fd86a"/>'+
+    '<rect x="15" y="12" width="4" height="2" fill="#ff5277"/><rect x="13" y="14" width="2" height="4" fill="#ff5277"/><rect x="19" y="14" width="2" height="4" fill="#ff5277"/><rect x="15" y="18" width="4" height="2" fill="#ff5277"/><rect x="15" y="14" width="4" height="4" fill="#ffd23f"/>'+
+    /* blue flower middle-right */
+    '<rect x="34" y="22" width="2" height="18" fill="#3b8c2f"/><rect x="36" y="30" width="3" height="2" fill="#4fd86a"/>'+
+    '<rect x="33" y="15" width="4" height="2" fill="#7a8bff"/><rect x="31" y="17" width="2" height="4" fill="#7a8bff"/><rect x="37" y="17" width="2" height="4" fill="#7a8bff"/><rect x="33" y="21" width="4" height="2" fill="#7a8bff"/><rect x="33" y="17" width="4" height="4" fill="#ffffff"/>'+
+    /* yellow flower right */
+    '<rect x="44" y="24" width="2" height="16" fill="#3b8c2f"/>'+
+    '<rect x="43" y="18" width="4" height="2" fill="#ffd23f"/><rect x="41" y="20" width="2" height="3" fill="#ffd23f"/><rect x="47" y="20" width="2" height="3" fill="#ffd23f"/><rect x="43" y="23" width="4" height="2" fill="#ffd23f"/><rect x="43" y="20" width="4" height="3" fill="#ff5277"/>'+
+    '</svg>');
+  function dataUri(svg){ return 'data:image/svg+xml,'+svg; }
+  const CROWN_SVG = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="12" shape-rendering="crispEdges" viewBox="0 0 16 12">'+
+    '<rect x="1" y="3" width="2" height="6" fill="#ffd23f"/><rect x="13" y="3" width="2" height="6" fill="#ffd23f"/>'+
+    '<rect x="7" y="2" width="2" height="7" fill="#ffd23f"/>'+
+    '<rect x="3" y="6" width="10" height="3" fill="#ffd23f"/>'+
+    '<rect x="3" y="9" width="10" height="2" fill="#ffae1f"/>'+
+    '<rect x="1" y="2" width="2" height="1" fill="#fff"/><rect x="13" y="2" width="2" height="1" fill="#fff"/><rect x="7" y="1" width="2" height="1" fill="#fff"/>'+
+    '<rect x="7" y="7" width="2" height="2" fill="#ff5277"/>'+
+    '</svg>');
+
+  const cam=document.getElementById('cam'), snap=document.getElementById('snap');
+  const fx=document.getElementById('fx'), flash=document.getElementById('flash');
+  const hud=document.getElementById('hud'), scoreVal=document.getElementById('scoreVal'), timeVal=document.getElementById('timeVal');
+  const startScreen=document.getElementById('start'), endScreen=document.getElementById('end');
+  const startBtn=document.getElementById('startBtn'), againBtn=document.getElementById('againBtn');
+  const startErr=document.getElementById('startErr'), loadMsg=document.getElementById('loadMsg'), nameInput=document.getElementById('nameInput');
+  const handEl=document.getElementById('hand'), gestureEl=document.getElementById('gesture');
+  const stingEl=document.getElementById('sting'), stingCd=document.getElementById('stingCd');
+  const pcountEl=document.getElementById('pcount');
+  const finalScore=document.getElementById('finalScore'), endStats=document.getElementById('endStats');
+  const photoWrap=document.getElementById('photoWrap'), photoImg=document.getElementById('photo'), dlBtn=document.getElementById('dlBtn');
+  const boardRows=document.getElementById('boardRows'), boardNote=document.getElementById('boardNote');
+
+  /* fill in sprite/legend/deco images */
+  document.getElementById('legBf').style.cssText+='background:url('+dataUri(BUTTERFLY_SVG)+') center/contain no-repeat;';
+  document.getElementById('legPink').style.cssText+='background:url('+dataUri(PINK_BUTTERFLY_SVG)+') center/contain no-repeat;';
+  document.getElementById('legBee').style.cssText+='background:url('+dataUri(BEE_SVG)+') center/contain no-repeat;';
+  document.getElementById('stingBee').innerHTML='<img src="'+dataUri(BEE_SVG)+'" style="width:60px;height:60px;image-rendering:pixelated;">';
+  function addDeco(parent){
+    /* faint repeating garden bands at top & bottom edges */
+    const gb=document.createElement('div'); gb.className='garden bottom';
+    gb.style.backgroundImage='url('+dataUri(GARDEN_SVG)+')'; gb.style.backgroundSize='150px 100px';
+    const gt=document.createElement('div'); gt.className='garden top';
+    gt.style.backgroundImage='url('+dataUri(GARDEN_SVG)+')'; gt.style.backgroundSize='150px 100px';
+    parent.appendChild(gb); parent.appendChild(gt);
+    /* oversized blooms drifting in the side margins, behind text */
+    const blooms=[
+      [FLOWER_SVG, 140, '8%', '22%', '0s'],
+      [FLOWER2_SVG,150, '84%','30%', '1.2s'],
+      [FLOWER_SVG, 120, '88%','64%', '0.6s'],
+      [FLOWER2_SVG,130, '6%', '68%', '1.8s']
+    ];
+    blooms.forEach(([svg,sz,left,top,delay])=>{
+      const b=document.createElement('img'); b.className='bloom'; b.src=dataUri(svg);
+      b.style.width=sz+'px'; b.style.left=left; b.style.top=top; b.style.animationDelay=delay;
+      parent.appendChild(b);
+    });
+    /* small crisp corner accents */
+    const specs=[['tl',FLOWER_SVG,16,20],['tr',FLOWER2_SVG,16,20],['bl',FLOWER2_SVG,16,20],['br',FLOWER_SVG,16,20]];
+    specs.forEach(([pos,svg,w,h])=>{
+      const d=document.createElement('img'); d.className='deco '+pos; d.src=dataUri(svg);
+      d.style.width=(w*2)+'px'; d.style.height=(h*2)+'px'; parent.appendChild(d);
+    });
+  }
+  addDeco(startScreen); addDeco(endScreen);
+
+  const GAME_TIME=60, STING_TIME=5, GRAB_RADIUS=60;
+  let playerName='PLAYER', score=0, caught=0, stings=0, timeLeft=GAME_TIME;
+  let running=false, frozen=false, snapped=false, sprites=[], ended=false;
+  let gameTimer=null, spawnTimer=null, rafId=null, lastTs=0, lastPhoto=null;
+  let hands=null, mpCamera=null, mpReady=false, handPos=null, isGrabbing=false, prevGrab=false;
+
+  function rand(a,b){ return a+Math.random()*(b-a); }
+  function W(){ return window.innerWidth; } function H(){ return window.innerHeight; }
+  function dist(ax,ay,bx,by){ const dx=ax-bx,dy=ay-by; return Math.sqrt(dx*dx+dy*dy); }
+  function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function spriteSvg(type){ return type==='bee'?BEE_SVG : type==='pink'?PINK_BUTTERFLY_SVG : BUTTERFLY_SVG; }
+  function makeSprite(type){
+    const el=document.createElement('div'); el.className='sprite';
+    el.style.background='url('+dataUri(spriteSvg(type))+') center/contain no-repeat';
+    const margin=50;
+    const s={ el,type, x:rand(margin,W()-margin), y:rand(110,H()-margin),
+      vx:rand(-90,90), vy:rand(-70,70), born:performance.now(),
+      life:type==='bee'?rand(4500,7000):rand(5500,10000), hit:false };
+    if(Math.abs(s.vx)<25) s.vx=s.vx<0?-45:45;
+    if(Math.abs(s.vy)<20) s.vy=s.vy<0?-40:40;
+    el.style.left=s.x+'px'; el.style.top=s.y+'px';
+    fx.appendChild(el); sprites.push(s);
+  }
+  function popup(x,y,txt,color){
+    const p=document.createElement('div'); p.className='pop'; p.textContent=txt;
+    p.style.left=x+'px'; p.style.top=y+'px'; p.style.color=color;
+    fx.appendChild(p); setTimeout(()=>p.remove(),800);
+  }
+  function removeSprite(s){ s.el.remove(); sprites=sprites.filter(o=>o!==s); }
+  function catchSprite(s){
+    if(s.hit) return; s.hit=true;
+    if(s.type==='bee'){
+      stings++; popup(s.x,s.y,'-5s','#ff9aa8'); removeSprite(s);
+      timeLeft=Math.max(0, timeLeft-5); timeVal.textContent=timeLeft;
+      freeze();
+      if(timeLeft<=0){ /* let freeze finish, then end */ }
+    } else if(s.type==='pink'){
+      score+=3; caught++; scoreVal.textContent=score; popup(s.x,s.y,'+3','#ff8fcf'); removeSprite(s);
+    } else {
+      score++; caught++; scoreVal.textContent=score; popup(s.x,s.y,'+1','#ffd23f'); removeSprite(s);
+    }
+  }
+  function freeze(){
+    frozen=true; stingEl.style.display='flex';
+    let cd=STING_TIME; stingCd.textContent=cd;
+    const iv=setInterval(()=>{ cd--; stingCd.textContent=cd;
+      if(cd<=0){ clearInterval(iv); stingEl.style.display='none'; frozen=false; lastTs=performance.now();
+        if(timeLeft<=0) endGame(); } },1000);
+  }
+
+  function tick(ts){
+    if(!running) return;
+    rafId=requestAnimationFrame(tick);
+    if(!lastTs) lastTs=ts;
+    let dt=(ts-lastTs)/1000; lastTs=ts;
+    if(frozen) return;
+    if(dt>0.05) dt=0.05;
+    const now=performance.now();
+    for(let i=sprites.length-1;i>=0;i--){
+      const s=sprites[i];
+      s.x+=s.vx*dt; s.y+=s.vy*dt;
+      const m=30;
+      if(s.x<m){s.x=m;s.vx=Math.abs(s.vx);} if(s.x>W()-m){s.x=W()-m;s.vx=-Math.abs(s.vx);}
+      if(s.y<100){s.y=100;s.vy=Math.abs(s.vy);} if(s.y>H()-m){s.y=H()-m;s.vy=-Math.abs(s.vy);}
+      s.vx+=rand(-30,30)*dt; s.vy+=rand(-30,30)*dt;
+      s.vx=Math.max(-130,Math.min(130,s.vx)); s.vy=Math.max(-110,Math.min(110,s.vy));
+      s.el.style.left=s.x+'px'; s.el.style.top=s.y+'px';
+      const flip=s.vx<0?-1:1; s.el.style.transform='translate(-50%,-50%) scaleX('+flip+')';
+      if(now-s.born>s.life) removeSprite(s);
+    }
+    if(handPos && isGrabbing && !prevGrab){
+      let best=null,bestD=GRAB_RADIUS;
+      for(const s of sprites){ if(s.hit) continue; const d=dist(handPos.x,handPos.y,s.x,s.y); if(d<bestD){bestD=d;best=s;} }
+      if(best) catchSprite(best);
+    }
+    prevGrab=isGrabbing;
+  }
+  function spawnLoop(){
+    if(!running) return;
+    if(!frozen){
+      const bf=sprites.filter(s=>s.type==='butterfly').length;
+      const pk=sprites.filter(s=>s.type==='pink').length;
+      const be=sprites.filter(s=>s.type==='bee').length;
+      if(bf<5) makeSprite('butterfly');
+      if(pk<1 && Math.random()<0.3) makeSprite('pink');
+      if(be<2 && Math.random()<0.5) makeSprite('bee');
+    }
+    spawnTimer=setTimeout(spawnLoop, rand(700,1150));
+  }
+  function startTimers(){
+    gameTimer=setInterval(()=>{
+      if(frozen) return;
+      timeLeft--; timeVal.textContent=timeLeft;
+      if(timeLeft===3) showPhotoCount(3);
+      else if(timeLeft===2) showPhotoCount(2);
+      else if(timeLeft===1){ showPhotoCount(1); if(!snapped){ snapped=true; takePhoto(); } }
+      if(timeLeft<=0) endGame();
+    },1000);
+  }
+  function showPhotoCount(n){
+    pcountEl.textContent = n>0 ? n : '';
+    pcountEl.style.display='flex';
+    pcountEl.classList.remove('ping'); void pcountEl.offsetWidth; pcountEl.classList.add('ping');
+    if(n===1){ setTimeout(()=>{ pcountEl.style.display='none'; }, 950); }
+  }
+
+  function takePhoto(){
+    try{
+      const vw=cam.videoWidth||640, vh=cam.videoHeight||480;
+      snap.width=vw; snap.height=vh;
+      const ctx=snap.getContext('2d'); ctx.imageSmoothingEnabled=false;
+      ctx.drawImage(cam,0,0,vw,vh);
+      const sx=vw/W(), sy=vh/H(), size=Math.round(52*sy);
+      const bfImg=new Image(), pkImg=new Image(), beeImg=new Image();
+      bfImg.src=dataUri(BUTTERFLY_SVG); pkImg.src=dataUri(PINK_BUTTERFLY_SVG); beeImg.src=dataUri(BEE_SVG);
+      for(const s of sprites){
+        const px=vw-(s.x*sx)-size/2, py=s.y*sy-size/2;
+        const img = s.type==='bee'?beeImg : s.type==='pink'?pkImg : bfImg;
+        try{ ctx.drawImage(img, px, py, size, size); }catch(e){}
+      }
+      lastPhoto=snap.toDataURL('image/jpeg',0.85);
+    }catch(e){ lastPhoto=null; }
+    flash.style.transition='none'; flash.style.opacity='0.9';
+    requestAnimationFrame(()=>{ flash.style.transition='opacity .5s'; flash.style.opacity='0'; });
+  }
+
+  function onResults(results){
+    if(results.multiHandLandmarks && results.multiHandLandmarks.length){
+      const lm=results.multiHandLandmarks[0], palm=lm[9];
+      const sx=(1-palm.x)*W(), sy=palm.y*H();
+      handPos={x:sx,y:sy}; isGrabbing=detectGrab(lm);
+      handEl.style.display='block'; handEl.style.left=sx+'px'; handEl.style.top=sy+'px';
+      handEl.classList.toggle('grab',isGrabbing);
+      if(running && !frozen) gestureEl.textContent=isGrabbing?'GRABBING':'OPEN HAND';
+    } else {
+      handPos=null; isGrabbing=false; prevGrab=false; handEl.style.display='none';
+      if(running && !frozen) gestureEl.textContent='SHOW YOUR HAND';
+    }
+  }
+  function detectGrab(lm){
+    const wrist=lm[0], tips=[8,12,16,20], mcps=[5,9,13,17]; let folded=0;
+    for(let i=0;i<4;i++){
+      const t=lm[tips[i]], mc=lm[mcps[i]];
+      const dTip=Math.hypot(t.x-wrist.x,t.y-wrist.y), dMcp=Math.hypot(mc.x-wrist.x,mc.y-wrist.y);
+      if(dTip<dMcp*1.15) folded++;
+    }
+    return folded>=3;
+  }
+  async function initMediaPipe(){
+    if(mpReady) return true;
+    if(typeof Hands==='undefined' || typeof Camera==='undefined') throw new Error('HAND TRACKING FAILED TO LOAD. CHECK CONNECTION.');
+    hands=new Hands({ locateFile:(f)=>'https://cdn.jsdelivr.net/npm/@mediapipe/hands/'+f });
+    hands.setOptions({ maxNumHands:1, modelComplexity:0, minDetectionConfidence:0.6, minTrackingConfidence:0.5 });
+    hands.onResults(onResults);
+    mpCamera=new Camera(cam,{ onFrame:async()=>{ if(hands) await hands.send({image:cam}); }, width:640, height:480, facingMode:'environment' });
+    await mpCamera.start(); mpReady=true; return true;
+  }
+
+  const sbOn=SUPABASE_URL && SUPABASE_KEY;
+  function sbHeaders(extra){ return Object.assign({ apikey:SUPABASE_KEY, Authorization:'Bearer '+SUPABASE_KEY, 'Content-Type':'application/json' }, extra||{}); }
+  async function submitScore(name,sc){ if(!sbOn) return; try{ await fetch(SUPABASE_URL+'/rest/v1/scores',{method:'POST',headers:sbHeaders({Prefer:'return=minimal'}),body:JSON.stringify({name:name,score:sc})}); }catch(e){} }
+  async function fetchTop(){ if(!sbOn) return null; try{ const r=await fetch(SUPABASE_URL+'/rest/v1/scores?select=name,score&order=score.desc&limit=10',{headers:sbHeaders()}); if(!r.ok) return null; return await r.json(); }catch(e){ return null; } }
+  function renderBoard(list,myName,myScore){
+    boardRows.innerHTML='';
+    if(!sbOn){ boardNote.textContent='ADD SUPABASE KEYS IN CODE TO ENABLE THE BOARD.'; return; }
+    if(!list){ boardNote.textContent='COULD NOT REACH THE LEADERBOARD.'; return; }
+    if(!list.length){ boardNote.textContent='BE THE FIRST ON THE BOARD!'; return; }
+    let markedMe=false;
+    list.forEach((e,i)=>{
+      const isMe=!markedMe && e.name===myName && e.score===myScore; if(isMe) markedMe=true;
+      const row=document.createElement('div'); row.className='row'+(i===0?' top1':'')+(isMe?' me':'');
+      const rank = i===0
+        ? '<img class="crown" src="'+dataUri(CROWN_SVG)+'" alt="1st">'
+        : '<div class="rk">'+(i+1)+'</div>';
+      row.innerHTML=rank+'<div class="nm">'+esc(e.name)+'</div><div class="sc">'+e.score+'</div>';
+      boardRows.appendChild(row);
+    });
+    boardNote.textContent='TOP 10 WORLDWIDE';
+  }
+
+  function resetState(){
+    sprites.forEach(s=>s.el.remove()); sprites=[];
+    score=0; caught=0; stings=0; timeLeft=GAME_TIME;
+    frozen=false; lastTs=0; prevGrab=false; snapped=false; lastPhoto=null; ended=false;
+    scoreVal.textContent='0'; timeVal.textContent=GAME_TIME; stingEl.style.display='none';
+    if(pcountEl) pcountEl.style.display='none';
+  }
+  function beginGame(){
+    resetState(); running=true;
+    hud.classList.remove('hidden'); gestureEl.classList.remove('hidden');
+    startScreen.classList.add('hidden'); endScreen.classList.add('hidden');
+    for(let i=0;i<3;i++) makeSprite('butterfly');
+    startTimers(); spawnLoop(); rafId=requestAnimationFrame(tick);
+  }
+  async function endGame(){
+    if(ended) return; ended=true;
+    running=false; clearInterval(gameTimer); clearTimeout(spawnTimer); cancelAnimationFrame(rafId);
+    sprites.forEach(s=>s.el.remove()); sprites=[];
+    gestureEl.classList.add('hidden'); hud.classList.add('hidden');
+    finalScore.textContent=score;
+    endStats.textContent=caught+' BUTTERFLIES / '+stings+' STING'+(stings===1?'':'S');
+    if(lastPhoto){ photoImg.src=lastPhoto; photoWrap.classList.remove('hidden'); } else photoWrap.classList.add('hidden');
+    endScreen.classList.remove('hidden');
+    boardRows.innerHTML=''; boardNote.textContent=sbOn?'SUBMITTING SCORE...':'';
+    await submitScore(playerName,score);
+    const list=await fetchTop(); renderBoard(list,playerName,score);
+  }
+
+  dlBtn.addEventListener('click',()=>{ if(!lastPhoto) return; const a=document.createElement('a'); a.href=lastPhoto; a.download='butterfly-catch.jpg'; a.click(); });
+  startBtn.addEventListener('click',async()=>{
+    const nm=(nameInput.value||'').trim();
+    if(!nm){ nameInput.focus(); nameInput.style.borderColor='#ff5277'; return; }
+    playerName=nm.slice(0,10).toUpperCase();
+    startErr.classList.add('hidden'); loadMsg.classList.remove('hidden');
+    startBtn.disabled=true; startBtn.textContent='STARTING...';
+    try{ await initMediaPipe(); loadMsg.classList.add('hidden'); beginGame(); }
+    catch(err){ loadMsg.classList.add('hidden'); startErr.textContent=(err&&err.message)?err.message:'COULD NOT START CAMERA. ALLOW ACCESS + CHECK CONNECTION.'; startErr.classList.remove('hidden'); }
+    finally{ startBtn.disabled=false; startBtn.innerHTML='PLAY &#9654;'; }
+  });
+  nameInput.addEventListener('input',()=>{ nameInput.style.borderColor='var(--blue)'; });
+  againBtn.addEventListener('click',beginGame);
+  window.addEventListener('resize',()=>{ sprites.forEach(s=>{ s.x=Math.min(s.x,W()-30); s.y=Math.min(s.y,H()-30); }); });
+})();
+</script>
+</body>
+</html>
