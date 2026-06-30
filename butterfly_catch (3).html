@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Butterfly Catch</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#0b1020; }
+  #stage { position:fixed; inset:0; }
+  #cam { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); background:#0b1020; }
+  #fx { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .sprite { position:absolute; font-size:46px; line-height:1; user-select:none; transform:translate(-50%,-50%); will-change:left,top; pointer-events:none; text-shadow:0 2px 8px rgba(0,0,0,.45); }
+
+  #hand { position:absolute; width:70px; height:70px; transform:translate(-50%,-50%); border-radius:50%; pointer-events:none; z-index:6; display:none; border:3px solid rgba(255,255,255,.85); transition:border-color .1s, background .1s, width .1s, height .1s; }
+  #hand.grab { width:54px; height:54px; border-color:#7CFFB2; background:rgba(124,255,178,.22); }
+  #hand .dot { position:absolute; top:50%; left:50%; width:8px; height:8px; margin:-4px 0 0 -4px; border-radius:50%; background:#fff; }
+
+  #hud { position:absolute; top:0; left:0; right:0; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; pointer-events:none; z-index:5; }
+  .pill { background:rgba(11,16,32,.55); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); color:#fff; padding:8px 14px; border-radius:999px; border:1px solid rgba(255,255,255,.14); }
+  .pill small { display:block; font-size:10px; font-weight:500; opacity:.7; letter-spacing:1px; text-transform:uppercase; }
+  .pill b { font-size:19px; font-variant-numeric:tabular-nums; }
+  #gesture { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:5; color:#fff; font-size:13px; font-weight:600; background:rgba(11,16,32,.5); padding:6px 16px; border-radius:999px; border:1px solid rgba(255,255,255,.14); pointer-events:none; }
+
+  #flash { position:absolute; inset:0; z-index:9; background:#fff; opacity:0; pointer-events:none; }
+
+  #sting { position:absolute; inset:0; z-index:8; display:none; align-items:center; justify-content:center; flex-direction:column; background:rgba(120,10,10,.34); backdrop-filter:blur(2px); color:#fff; }
+  #sting .big { font-size:72px; margin-bottom:6px; }
+  #sting .msg { font-size:20px; font-weight:700; }
+  #sting .cd { font-size:64px; font-weight:800; margin-top:10px; font-variant-numeric:tabular-nums; }
+
+  .overlay { position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center; flex-direction:column; padding:24px; text-align:center; color:#fff; background:rgba(11,16,32,.85); backdrop-filter:blur(10px); overflow-y:auto; }
+  .overlay h1 { font-size:32px; margin-bottom:10px; letter-spacing:.5px; }
+  .overlay p { font-size:15px; opacity:.85; max-width:330px; line-height:1.55; margin-bottom:8px; }
+  .legend { display:flex; gap:22px; margin:16px 0; }
+  .legend div { font-size:13px; opacity:.9; }
+  .legend span { font-size:30px; display:block; margin-bottom:4px; }
+  .btn { margin-top:14px; pointer-events:auto; cursor:pointer; background:#fff; color:#0b1020; border:none; font-weight:700; font-size:17px; padding:14px 38px; border-radius:999px; letter-spacing:.3px; }
+  .btn:active { transform:scale(.96); }
+  .btn:disabled { opacity:.5; }
+  .btn.ghost { background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.25); margin-top:10px; padding:11px 28px; font-size:15px; }
+  #nameInput { pointer-events:auto; width:260px; max-width:80vw; font-size:18px; text-align:center; padding:13px 16px; border-radius:14px; border:1px solid rgba(255,255,255,.3); background:rgba(255,255,255,.1); color:#fff; outline:none; margin-top:6px; }
+  #nameInput::placeholder { color:rgba(255,255,255,.5); }
+  #finalScore { font-size:60px; font-weight:800; margin:4px 0 2px; }
+  #endStats { font-size:14px; opacity:.8; margin-bottom:6px; }
+  #photoWrap { margin:8px 0; }
+  #photo { width:200px; max-width:60vw; border-radius:14px; border:1px solid rgba(255,255,255,.25); transform:scaleX(-1); }
+  #photoActions { display:flex; gap:10px; justify-content:center; }
+  .err { color:#ffb4b4; font-size:13px; margin-top:12px; max-width:300px; line-height:1.5; }
+  .loading { color:#fff; font-size:14px; opacity:.8; margin-top:12px; }
+  .hidden { display:none !important; }
+
+  /* leaderboard */
+  #board { width:320px; max-width:88vw; margin:14px 0 4px; text-align:left; }
+  #board h2 { font-size:15px; text-transform:uppercase; letter-spacing:1.5px; opacity:.7; text-align:center; margin-bottom:10px; font-weight:600; }
+  .row { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; background:rgba(255,255,255,.06); margin-bottom:6px; font-size:15px; }
+  .row.me { background:rgba(124,255,178,.18); border:1px solid rgba(124,255,178,.4); }
+  .row .rk { width:24px; font-weight:800; opacity:.7; text-align:center; }
+  .row .nm { flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .sc { font-weight:800; font-variant-numeric:tabular-nums; }
+  .boardNote { font-size:12px; opacity:.55; text-align:center; margin-top:4px; }
+
+  .pop { position:absolute; transform:translate(-50%,-50%); z-index:7; pointer-events:none; font-weight:800; font-size:26px; color:#fff; text-shadow:0 2px 6px rgba(0,0,0,.5); animation:rise .8s ease-out forwards; }
+  @keyframes rise { from{opacity:1;} to{opacity:0; transform:translate(-50%,-160%);} }
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="cam" autoplay playsinline muted></video>
+  <canvas id="snap" class="hidden"></canvas>
+  <div id="fx"></div>
+  <div id="flash"></div>
+
+  <div id="hand"><div class="dot"></div></div>
+
+  <div id="hud" class="hidden">
+    <div class="pill"><small>Score</small><b id="scoreVal">0</b></div>
+    <div class="pill"><small>Time</small><b id="timeVal">60</b></div>
+  </div>
+  <div id="gesture" class="hidden">Show your open hand</div>
+
+  <div id="sting">
+    <div class="big">&#128029;</div>
+    <div class="msg">Ouch! A bee stung you</div>
+    <div class="cd" id="stingCd">5</div>
+  </div>
+
+  <!-- Name entry -->
+  <div id="start" class="overlay">
+    <h1>&#129419; Butterfly Catch</h1>
+    <p>Reach out and <b>close your fist</b> over a butterfly to grab it. 60 seconds on the clock!</p>
+    <div class="legend">
+      <div><span>&#129419;</span>Grab = +1</div>
+      <div><span>&#128029;</span>Grab = 5s freeze</div>
+    </div>
+    <p style="font-size:14px;opacity:.9;margin-top:6px;">Enter your name to start:</p>
+    <input id="nameInput" type="text" maxlength="14" placeholder="Your name" autocomplete="off" />
+    <button class="btn" id="startBtn">Allow camera &amp; play</button>
+    <div class="loading hidden" id="loadMsg">Loading hand tracking&hellip;</div>
+    <div class="err hidden" id="startErr"></div>
+  </div>
+
+  <!-- End / leaderboard -->
+  <div id="end" class="overlay hidden">
+    <h1>Time's up!</h1>
+    <div id="finalScore">0</div>
+    <div id="endStats"></div>
+    <div id="photoWrap" class="hidden">
+      <img id="photo" alt="Your final shot" />
+      <div id="photoActions"><button class="btn ghost" id="dlBtn">Save photo</button></div>
+    </div>
+    <div id="board">
+      <h2>Leaderboard</h2>
+      <div id="boardRows"></div>
+      <div class="boardNote" id="boardNote"></div>
+    </div>
+    <button class="btn" id="againBtn">Play again</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script>
+(function(){
+  /* =================================================================
+     SUPABASE SETUP  -- fill these two values in (see instructions)
+     ================================================================= */
+  const SUPABASE_URL = "";   // e.g. "https://abcdwxyz.supabase.co"
+  const SUPABASE_KEY = "";   // your project's anon public key
+  /* ================================================================= */
+
+  const cam = document.getElementById('cam');
+  const snap = document.getElementById('snap');
+  const fx = document.getElementById('fx');
+  const flash = document.getElementById('flash');
+  const hud = document.getElementById('hud');
+  const scoreVal = document.getElementById('scoreVal');
+  const timeVal = document.getElementById('timeVal');
+  const startScreen = document.getElementById('start');
+  const endScreen = document.getElementById('end');
+  const startBtn = document.getElementById('startBtn');
+  const againBtn = document.getElementById('againBtn');
+  const startErr = document.getElementById('startErr');
+  const loadMsg = document.getElementById('loadMsg');
+  const nameInput = document.getElementById('nameInput');
+  const handEl = document.getElementById('hand');
+  const gestureEl = document.getElementById('gesture');
+  const stingEl = document.getElementById('sting');
+  const stingCd = document.getElementById('stingCd');
+  const finalScore = document.getElementById('finalScore');
+  const endStats = document.getElementById('endStats');
+  const photoWrap = document.getElementById('photoWrap');
+  const photoImg = document.getElementById('photo');
+  const dlBtn = document.getElementById('dlBtn');
+  const boardRows = document.getElementById('boardRows');
+  const boardNote = document.getElementById('boardNote');
+
+  const GAME_TIME = 60;
+  const STING_TIME = 5;
+  const GRAB_RADIUS = 60;
+
+  let playerName = 'Player';
+  let score=0, caught=0, stings=0;
+  let timeLeft=GAME_TIME;
+  let running=false, frozen=false, snapped=false;
+  let sprites=[];
+  let gameTimer=null, spawnTimer=null, rafId=null;
+  let lastTs=0;
+  let lastPhoto=null;
+
+  let hands=null, mpCamera=null, mpReady=false;
+  let handPos=null, isGrabbing=false, prevGrab=false;
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function W(){ return window.innerWidth; }
+  function H(){ return window.innerHeight; }
+  function dist(ax,ay,bx,by){ const dx=ax-bx, dy=ay-by; return Math.sqrt(dx*dx+dy*dy); }
+  function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  /* ---------------- sprites ---------------- */
+  function makeSprite(type){
+    const el=document.createElement('div');
+    el.className='sprite';
+    el.textContent = type==='bee' ? '\uD83D\uDC1D' : '\uD83E\uDD8B';
+    const margin=50;
+    const s={ el, type,
+      x:rand(margin,W()-margin), y:rand(100,H()-margin),
+      vx:rand(-90,90), vy:rand(-70,70),
+      born:performance.now(),
+      life: type==='bee' ? rand(4500,7000) : rand(5500,10000), hit:false };
+    if (Math.abs(s.vx)<25) s.vx = s.vx<0?-45:45;
+    if (Math.abs(s.vy)<20) s.vy = s.vy<0?-40:40;
+    el.style.left=s.x+'px'; el.style.top=s.y+'px';
+    fx.appendChild(el); sprites.push(s);
+  }
+  function popup(x,y,txt,color){
+    const p=document.createElement('div'); p.className='pop'; p.textContent=txt;
+    p.style.left=x+'px'; p.style.top=y+'px'; p.style.color=color;
+    fx.appendChild(p); setTimeout(()=>p.remove(),800);
+  }
+  function removeSprite(s){ s.el.remove(); sprites=sprites.filter(o=>o!==s); }
+  function catchSprite(s){
+    if (s.hit) return; s.hit=true;
+    if (s.type==='bee'){ stings++; popup(s.x,s.y,'\u2212','#ffd2d2'); removeSprite(s); freeze(); }
+    else { score++; caught++; scoreVal.textContent=score; popup(s.x,s.y,'+1','#fff'); removeSprite(s); }
+  }
+  function freeze(){
+    frozen=true; stingEl.style.display='flex';
+    let cd=STING_TIME; stingCd.textContent=cd;
+    const iv=setInterval(()=>{ cd--; stingCd.textContent=cd;
+      if (cd<=0){ clearInterval(iv); stingEl.style.display='none'; frozen=false; lastTs=performance.now(); } },1000);
+  }
+
+  /* ---------------- loop ---------------- */
+  function tick(ts){
+    if (!running) return;
+    rafId=requestAnimationFrame(tick);
+    if (!lastTs) lastTs=ts;
+    let dt=(ts-lastTs)/1000; lastTs=ts;
+    if (frozen) return;
+    if (dt>0.05) dt=0.05;
+    const now=performance.now();
+    for (let i=sprites.length-1;i>=0;i--){
+      const s=sprites[i];
+      s.x+=s.vx*dt; s.y+=s.vy*dt;
+      const m=30;
+      if (s.x<m){s.x=m;s.vx=Math.abs(s.vx);}
+      if (s.x>W()-m){s.x=W()-m;s.vx=-Math.abs(s.vx);}
+      if (s.y<90){s.y=90;s.vy=Math.abs(s.vy);}
+      if (s.y>H()-m){s.y=H()-m;s.vy=-Math.abs(s.vy);}
+      s.vx+=rand(-30,30)*dt; s.vy+=rand(-30,30)*dt;
+      s.vx=Math.max(-130,Math.min(130,s.vx)); s.vy=Math.max(-110,Math.min(110,s.vy));
+      s.el.style.left=s.x+'px'; s.el.style.top=s.y+'px';
+      const flip=s.vx<0?-1:1;
+      s.el.style.transform='translate(-50%,-50%) scaleX('+flip+')';
+      if (now-s.born>s.life) removeSprite(s);
+    }
+    if (handPos && isGrabbing && !prevGrab){
+      let best=null, bestD=GRAB_RADIUS;
+      for (const s of sprites){ if (s.hit) continue;
+        const d=dist(handPos.x,handPos.y,s.x,s.y); if (d<bestD){ bestD=d; best=s; } }
+      if (best) catchSprite(best);
+    }
+    prevGrab=isGrabbing;
+  }
+  function spawnLoop(){
+    if (!running) return;
+    if (!frozen){
+      const bf=sprites.filter(s=>s.type==='butterfly').length;
+      const be=sprites.filter(s=>s.type==='bee').length;
+      if (bf<5) makeSprite('butterfly');
+      if (be<2 && Math.random()<0.5) makeSprite('bee');
+    }
+    spawnTimer=setTimeout(spawnLoop, rand(700,1150));
+  }
+  function startTimers(){
+    gameTimer=setInterval(()=>{
+      if (frozen) return;
+      timeLeft--; timeVal.textContent=timeLeft;
+      if (timeLeft===1 && !snapped){ snapped=true; takePhoto(); }
+      if (timeLeft<=0) endGame();
+    },1000);
+  }
+
+  /* ---------------- photo ---------------- */
+  function takePhoto(){
+    try {
+      const vw=cam.videoWidth||640, vh=cam.videoHeight||480;
+      snap.width=vw; snap.height=vh;
+      const ctx=snap.getContext('2d');
+      ctx.drawImage(cam,0,0,vw,vh);
+      // draw current sprites onto the photo, scaled from screen to video space
+      const sx=vw/W(), sy=vh/H();
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font=Math.round(46*sy)+'px serif';
+      // photo is later mirrored in CSS to match the live mirrored view,
+      // so draw sprite x un-mirrored here:
+      for (const s of sprites){
+        const px=vw-(s.x*sx);
+        ctx.fillText(s.type==='bee'?'\uD83D\uDC1D':'\uD83E\uDD8B', px, s.y*sy);
+      }
+      lastPhoto=snap.toDataURL('image/jpeg',0.85);
+    } catch(e){ lastPhoto=null; }
+    flash.style.transition='none'; flash.style.opacity='0.9';
+    requestAnimationFrame(()=>{ flash.style.transition='opacity .5s'; flash.style.opacity='0'; });
+  }
+
+  /* ---------------- hands ---------------- */
+  function onResults(results){
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length){
+      const lm=results.multiHandLandmarks[0];
+      const palm=lm[9];
+      const sx=(1-palm.x)*W(), sy=palm.y*H();
+      handPos={x:sx,y:sy};
+      isGrabbing=detectGrab(lm);
+      handEl.style.display='block';
+      handEl.style.left=sx+'px'; handEl.style.top=sy+'px';
+      handEl.classList.toggle('grab', isGrabbing);
+      if (running && !frozen) gestureEl.textContent = isGrabbing ? 'Grabbing' : 'Open hand';
+    } else {
+      handPos=null; isGrabbing=false; prevGrab=false;
+      handEl.style.display='none';
+      if (running && !frozen) gestureEl.textContent='Show your hand';
+    }
+  }
+  function detectGrab(lm){
+    const wrist=lm[0];
+    const tips=[8,12,16,20], mcps=[5,9,13,17];
+    let folded=0;
+    for (let i=0;i<4;i++){
+      const t=lm[tips[i]], mc=lm[mcps[i]];
+      const dTip=Math.hypot(t.x-wrist.x,t.y-wrist.y);
+      const dMcp=Math.hypot(mc.x-wrist.x,mc.y-wrist.y);
+      if (dTip < dMcp*1.15) folded++;
+    }
+    return folded>=3;
+  }
+  async function initMediaPipe(){
+    if (mpReady) return true;
+    if (typeof Hands==='undefined' || typeof Camera==='undefined')
+      throw new Error('Hand tracking library failed to load. Check your internet connection.');
+    hands=new Hands({ locateFile:(f)=>'https://cdn.jsdelivr.net/npm/@mediapipe/hands/'+f });
+    hands.setOptions({ maxNumHands:1, modelComplexity:0, minDetectionConfidence:0.6, minTrackingConfidence:0.5 });
+    hands.onResults(onResults);
+    mpCamera=new Camera(cam, { onFrame: async ()=>{ if (hands) await hands.send({ image:cam }); }, width:640, height:480, facingMode:'environment' });
+    await mpCamera.start();
+    mpReady=true; return true;
+  }
+
+  /* ---------------- leaderboard (Supabase REST) ---------------- */
+  const sbOn = SUPABASE_URL && SUPABASE_KEY;
+  function sbHeaders(extra){
+    return Object.assign({ apikey:SUPABASE_KEY, Authorization:'Bearer '+SUPABASE_KEY, 'Content-Type':'application/json' }, extra||{});
+  }
+  async function submitScore(name, sc){
+    if (!sbOn) return;
+    try {
+      await fetch(SUPABASE_URL+'/rest/v1/scores', { method:'POST', headers:sbHeaders({Prefer:'return=minimal'}),
+        body:JSON.stringify({ name:name, score:sc }) });
+    } catch(e){}
+  }
+  async function fetchTop(){
+    if (!sbOn) return null;
+    try {
+      const r=await fetch(SUPABASE_URL+'/rest/v1/scores?select=name,score&order=score.desc&limit=10', { headers:sbHeaders() });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch(e){ return null; }
+  }
+  function renderBoard(list, myName, myScore){
+    boardRows.innerHTML='';
+    if (!sbOn){
+      boardNote.textContent='Add your Supabase URL & key in the code to enable the shared leaderboard.';
+      return;
+    }
+    if (!list){ boardNote.textContent='Could not reach the leaderboard. Check your connection or setup.'; return; }
+    if (!list.length){ boardNote.textContent='Be the first on the board!'; return; }
+    let markedMe=false;
+    list.forEach((e,i)=>{
+      const isMe = !markedMe && e.name===myName && e.score===myScore;
+      if (isMe) markedMe=true;
+      const row=document.createElement('div');
+      row.className='row'+(isMe?' me':'');
+      row.innerHTML='<div class="rk">'+(i+1)+'</div><div class="nm">'+esc(e.name)+'</div><div class="sc">'+e.score+'</div>';
+      boardRows.appendChild(row);
+    });
+    boardNote.textContent='Top 10 worldwide';
+  }
+
+  /* ---------------- state ---------------- */
+  function resetState(){
+    sprites.forEach(s=>s.el.remove()); sprites=[];
+    score=0; caught=0; stings=0; timeLeft=GAME_TIME;
+    frozen=false; lastTs=0; prevGrab=false; snapped=false; lastPhoto=null;
+    scoreVal.textContent='0'; timeVal.textContent=GAME_TIME;
+    stingEl.style.display='none';
+  }
+  function beginGame(){
+    resetState(); running=true;
+    hud.classList.remove('hidden');
+    gestureEl.classList.remove('hidden');
+    startScreen.classList.add('hidden');
+    endScreen.classList.add('hidden');
+    for (let i=0;i<3;i++) makeSprite('butterfly');
+    startTimers(); spawnLoop();
+    rafId=requestAnimationFrame(tick);
+  }
+  async function endGame(){
+    running=false;
+    clearInterval(gameTimer); clearTimeout(spawnTimer); cancelAnimationFrame(rafId);
+    sprites.forEach(s=>s.el.remove()); sprites=[];
+    gestureEl.classList.add('hidden'); hud.classList.add('hidden');
+    finalScore.textContent=score;
+    endStats.textContent=caught+' butterflies \u00b7 '+stings+' sting'+(stings===1?'':'s');
+    if (lastPhoto){ photoImg.src=lastPhoto; photoWrap.classList.remove('hidden'); }
+    else photoWrap.classList.add('hidden');
+    endScreen.classList.remove('hidden');
+
+    boardRows.innerHTML=''; boardNote.textContent = sbOn ? 'Submitting score\u2026' : '';
+    await submitScore(playerName, score);
+    const list=await fetchTop();
+    renderBoard(list, playerName, score);
+  }
+
+  dlBtn.addEventListener('click', ()=>{
+    if (!lastPhoto) return;
+    const a=document.createElement('a');
+    a.href=lastPhoto; a.download='butterfly-catch.jpg'; a.click();
+  });
+
+  startBtn.addEventListener('click', async ()=>{
+    const nm=(nameInput.value||'').trim();
+    if (!nm){ nameInput.focus(); nameInput.style.borderColor='#ffb4b4'; return; }
+    playerName=nm.slice(0,14);
+    startErr.classList.add('hidden'); loadMsg.classList.remove('hidden');
+    startBtn.disabled=true; startBtn.textContent='Starting\u2026';
+    try { await initMediaPipe(); loadMsg.classList.add('hidden'); beginGame(); }
+    catch(err){ loadMsg.classList.add('hidden');
+      startErr.textContent=(err && err.message)?err.message:'Could not start the camera or hand tracking. Allow camera access and check your connection.';
+      startErr.classList.remove('hidden'); }
+    finally { startBtn.disabled=false; startBtn.textContent='Allow camera & play'; }
+  });
+  nameInput.addEventListener('input', ()=>{ nameInput.style.borderColor='rgba(255,255,255,.3)'; });
+  againBtn.addEventListener('click', beginGame);
+
+  window.addEventListener('resize', ()=>{ sprites.forEach(s=>{ s.x=Math.min(s.x,W()-30); s.y=Math.min(s.y,H()-30); }); });
+})();
+</script>
+</body>
+</html>
